@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException, Path
+from app_storage import users_storage, messages_storage
 from user_model import User
 from messages_models import Message
-import data_storage
+from user_class import AppUser
+import validations
 
 # to run copy to terminal -> uvicorn main:msg_app --reload
 msg_app = FastAPI(title="Nemo messaging app",
@@ -11,59 +13,41 @@ msg_app = FastAPI(title="Nemo messaging app",
                   contact={"name": "nimrod segev", "email": "nimrodsegev10@gmail.com"}
                   )
 
-users_dict = data_storage.users_dict
-messages_dict = data_storage.messages_dict
-
 
 @msg_app.get("/", tags=["Home page"])
-async def home_page():
-    return "welcome to our messaging app! please register to start enjoying it"
+async def home_page() -> dict[str, str]:
+    return {"message": "welcome to our messaging app! please register to start enjoying it"}
 
 
 @msg_app.get("/users", tags=["Users"])
-async def get_all_users() -> dict:
-    return users_dict
+async def get_all_users() -> dict[str, str]:
+    return users_storage
 
 
 @msg_app.post("/users", tags=["Users"])
-async def create_user(user: User) -> [str, HTTPException]:
-    if user.display_name in users_dict:
-        raise HTTPException(status_code=403, detail=f"Sorry display name {user.display_name} is already taken")
-    users_dict[user.display_name] = user
-    return f"user {user.display_name} registration was successful"
+async def create_user(user: User) -> [dict[str, str], HTTPException]:
+    validations.check_if_user_exist(user)
+    users_storage[user.display_name] = AppUser(user)
+    messages_storage[user.display_name] = []
+    return {"message": f"User {user.display_name} registration was successful"}
 
 
 @msg_app.delete("/users/{user_display_name}", tags=["Users"])
-async def delete_user_by_display_name(user_display_name: str) -> [str, HTTPException]:
-    if user_display_name not in users_dict:
-        raise HTTPException(status_code=403, detail=f"user {user_display_name} does not exist")
-    users_dict.pop(user_display_name)
-    return f"user {user_display_name} deletion was successful"
+async def delete_user(user_display_name) -> [dict[str, str], HTTPException]:
+    validations.check_if_user_does_not_exist(user_display_name)
+    users_storage.pop(user_display_name)
+    return {"message": f"User {user_display_name} deletion was successful"}
 
 
 @msg_app.get("/messages/{user_display_name}/{msg_quantity}", tags=["Messages"])
-async def get_my_messages(user_display_name: str = Path(None, description="Enter your display name"),
-                          msg_quantity: int = Path(None, gt=0,
-                                                   description="Enter the amount of messages you would like to receive"
-                                                   )) -> [list[dict], HTTPException]:
-    if user_display_name not in users_dict:
-        return HTTPException(status_code=403, detail=f"Sorry user {user_display_name} does not exist")
-    if user_display_name not in messages_dict:
-        return HTTPException(status_code=403, detail=f"Sorry user {user_display_name} does not have any messages")
-    if msg_quantity > len(messages_dict[user_display_name]):
-        return HTTPException(status_code=403, detail=f"Sorry you have less messages than {msg_quantity}"
-                                                     f" please ask for less messages")
-    return messages_dict[user_display_name][-msg_quantity:]
+async def get_my_messages(user_display_name, msg_quantity: int = Path(None, gt=0)) -> [list[dict], HTTPException]:
+    validations.check_if_user_does_not_exist(user_display_name)
+    validations.check_if_user_has_messages(user_display_name)
+    return messages_storage[user_display_name][-msg_quantity:]
 
 
 @msg_app.post("/messages", tags=["Messages"])
 async def send_message(message: Message) -> [str, HTTPException]:
-    if message.receiver not in users_dict:
-        raise HTTPException(status_code=403, detail=f"user {message.receiver} does not exist")
-    messages_dict[message.receiver].append({"message id": message.message_id,
-                                            "sender": message.sender,
-                                            "content": message.content,
-                                            "day": message.date.date(),
-                                            "time": message.date.time()
-                                            })
-    return f"message {message.content} was sent to {message.receiver} successfully"
+    validations.check_if_message_receiver_exist(message)
+    messages_storage[message.receiver_display_name].append(message)
+    return {"message": f"message {message.content} to {message.receiver_display_name} was sent successfully"}
