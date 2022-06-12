@@ -4,7 +4,8 @@ THIS APP USES FASTAPI TO SEND MESSAGES BETWEEN REGISTERED USERS
 
 **VERSION: 1.0.0**
 
-REQUIERMENTS:
+REQUIREMENTS:
 	fastapi==0.78.0
 	pydantic==1.9.1
-	
+
+to run copy to terminal -> uvicorn main:msg_app --reload
